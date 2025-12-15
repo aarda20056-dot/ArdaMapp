@@ -26,9 +26,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.shouldShowRationale
+import com.google.android.gms.maps.CameraUpdateFactory
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.google.maps.android.compose.Marker
+
+
 
 
 
@@ -63,21 +73,45 @@ class MainActivity : ComponentActivity() {
         }
            when {
                konumIzni.allPermissionsGranted -> {
-                   val izmir = LatLng(27.4305, 38.4189)
+                   val izmir = LatLng(38.4189, 27.1305)
+                   var hedef by remember { mutableStateOf<LatLng?>(null) }
+
+                   val cameraPositionState = rememberCameraPositionState {
+                       position= CameraPosition.fromLatLngZoom(izmir,12f)
+
+                   }
+                 val scope = rememberCoroutineScope()
+
+                   LaunchedEffect(hedef) {
+                       hedef?.let {  secilen ->
+                               cameraPositionState.animate(
+                                   update = CameraUpdateFactory.newLatLngZoom(secilen,14f),
+                                   durationMs=800
+                               )
+
+                       }
+                   }
 
 
-                 val cameraPositionState = rememberCameraPositionState {
-                position = CameraPosition.fromLatLngZoom(izmir, 12f)
-                  }
 
             GoogleMap(
                 modifier = modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState
+                cameraPositionState = cameraPositionState,
+                onMapClick = { tiklanan ->
+                    hedef = tiklanan
+                }
             ) {
                 Marker(
                     state = MarkerState(position = izmir),
                     title = "Başlangıç Noktası"
+
                 )
+                hedef?.let {
+                    Marker (
+                        state = MarkerState(it),
+                        title = "Hedef"
+                    )
+                }
             }
         }
 
