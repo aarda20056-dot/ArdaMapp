@@ -48,6 +48,8 @@ class MainActivity : ComponentActivity() {
     }
 }
        @Composable
+
+
        fun MainScreen(modifier: Modifier = Modifier) {
          val konumIzni = rememberMultiplePermissionsState(
              permissions = listOf(

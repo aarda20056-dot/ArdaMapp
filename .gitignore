@@ -13,3 +13,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+.idea/
+# API & KEY FILES
+gradle.properties
+*.jks
+key
+*.txt
+
