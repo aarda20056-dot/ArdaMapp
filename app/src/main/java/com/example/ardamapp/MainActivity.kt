@@ -37,6 +37,22 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.google.maps.android.compose.Marker
+import android.annotation.SuppressLint
+import com.google.android.gms.location.LocationServices
+import androidx.compose.ui.platform.LocalContext
+import android.location.Location
+import android.util.Log
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import com.google.maps.android.compose.Polyline
+import kotlin.math.*
+
+
+
+
+
+
+
 
 
 
@@ -72,8 +88,18 @@ class MainActivity : ComponentActivity() {
              konumIzni.launchMultiplePermissionRequest()
         }
            when {
+
                konumIzni.allPermissionsGranted -> {
+                   val directionsKey = "AIzaSyAo9qkxqm2unYQIhfOHegFw-vdbNEYZBXU"
+                   val context = LocalContext.current
+                   var rotaPoints by remember { mutableStateOf<String?>(null) }
+
+                   val fusedLocationClient = remember {
+                       LocationServices.getFusedLocationProviderClient(context)
+                   }
                    val izmir = LatLng(38.4189, 27.1305)
+                   var benimKonumum by remember { mutableStateOf<LatLng?>(null) }
+
                    var hedef by remember { mutableStateOf<LatLng?>(null) }
 
                    val cameraPositionState = rememberCameraPositionState {
@@ -91,6 +117,68 @@ class MainActivity : ComponentActivity() {
 
                        }
                    }
+                   @SuppressLint("MissingPermission")
+                   LaunchedEffect(Unit) {
+                       fusedLocationClient.lastLocation
+                           .addOnSuccessListener { location -> location?.let {
+                               benimKonumum= LatLng(it.latitude,it.longitude)
+                           }
+
+                           }
+                   }
+                   //ilk konum kamera efekti
+                   LaunchedEffect(benimKonumum) {
+                       benimKonumum?.let {
+                           cameraPositionState.animate(
+                               update = CameraUpdateFactory.newLatLngZoom(it,15f),
+                               durationMs = 800
+                           )
+                       }
+                   }
+                   val directionsApi = remember {
+                       Retrofit.Builder()
+                           .baseUrl("https://maps.googleapis.com/")
+                           .addConverterFactory(GsonConverterFactory.create())
+                           .build()
+                           .create(DirectionsApi::class.java)
+                   }
+                   LaunchedEffect(hedef,benimKonumum) {
+                       val ben = benimKonumum
+                       val şimal = hedef
+                       Log.d("DIRECTIONS", "trigger ben=$ben hedef=$şimal")
+
+                       if (ben != null && şimal != null){
+                           try {
+                               val response = directionsApi.getDirections(
+                                   origin = "${ben.latitude},${ben.longitude}",
+                                   destination = "${şimal.latitude},${şimal.longitude}",
+                                   mode = "walking",
+                                   key = directionsKey
+
+
+                               )
+                               rotaPoints= response.routes.firstOrNull()?.overview_polyline?.points
+                               Log.d(
+                                   "DIRECTIONS",
+                                   "status=${response.status},routes=${response.routes.size}"
+                               )
+
+                           }catch (e: Exception){
+                               Log.e("DIRECTIONS", "Directions çağrısı hata verdi", e)
+
+                           }
+
+
+
+
+
+
+
+                       }
+
+
+
+                   }
 
 
 
@@ -106,11 +194,22 @@ class MainActivity : ComponentActivity() {
                     title = "Başlangıç Noktası"
 
                 )
+                benimKonumum?.let {
+                    Marker (
+                        state = MarkerState(it),
+                        title = "Bulunduğum konum"
+                    )
+                }
                 hedef?.let {
                     Marker (
                         state = MarkerState(it),
                         title = "Hedef"
                     )
+                }
+                rotaPoints?.let { encoded ->
+                    val decoded = decodePolyline(encoded)
+                    Polyline(points = decoded)
+
                 }
             }
         }
@@ -154,6 +253,39 @@ class MainActivity : ComponentActivity() {
          }
      }
  }
+private fun decodePolyline(encoded: String): List<LatLng> {
+    val poly = ArrayList<LatLng>()
+    var index = 0
+    val len = encoded.length
+    var lat = 0
+    var lng = 0
+
+    while (index < len) {
+        var b: Int
+        var shift = 0
+        var result = 0
+        do {
+            b = encoded[index++].code - 63
+            result = result or ((b and 0x1f) shl shift)
+            shift += 5
+        } while (b >= 0x20)
+        val dlat = if ((result and 1) != 0) (result shr 1).inv() else (result shr 1)
+        lat += dlat
+
+        shift = 0
+        result = 0
+        do {
+            b = encoded[index++].code - 63
+            result = result or ((b and 0x1f) shl shift)
+            shift += 5
+        } while (b >= 0x20)
+        val dlng = if ((result and 1) != 0) (result shr 1).inv() else (result shr 1)
+        lng += dlng
+
+        poly.add(LatLng(lat / 1E5, lng / 1E5))
+    }
+    return poly
+}
 
 
 @Composable
