@@ -30,22 +30,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.shouldShowRationale
 import com.google.android.gms.maps.CameraUpdateFactory
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import com.google.maps.android.compose.Marker
 import android.annotation.SuppressLint
 import com.google.android.gms.location.LocationServices
 import androidx.compose.ui.platform.LocalContext
-import android.location.Location
 import android.util.Log
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import com.google.maps.android.compose.Polyline
 import kotlin.math.*
+
+
+
 
 
 
@@ -91,6 +89,8 @@ class MainActivity : ComponentActivity() {
 
                konumIzni.allPermissionsGranted -> {
                    val directionsKey = "AIzaSyAo9qkxqm2unYQIhfOHegFw-vdbNEYZBXU"
+                   var sure by remember { mutableStateOf<String?>(null) }
+                   var mesafe by remember { mutableStateOf<String?>(null) }
                    val context = LocalContext.current
                    var rotaPoints by remember { mutableStateOf<String?>(null) }
 
@@ -103,26 +103,27 @@ class MainActivity : ComponentActivity() {
                    var hedef by remember { mutableStateOf<LatLng?>(null) }
 
                    val cameraPositionState = rememberCameraPositionState {
-                       position= CameraPosition.fromLatLngZoom(izmir,12f)
+                       position = CameraPosition.fromLatLngZoom(izmir, 12f)
 
                    }
-                 val scope = rememberCoroutineScope()
+                   val scope = rememberCoroutineScope()
 
                    LaunchedEffect(hedef) {
-                       hedef?.let {  secilen ->
-                               cameraPositionState.animate(
-                                   update = CameraUpdateFactory.newLatLngZoom(secilen,14f),
-                                   durationMs=800
-                               )
+                       hedef?.let { secilen ->
+                           cameraPositionState.animate(
+                               update = CameraUpdateFactory.newLatLngZoom(secilen, 14f),
+                               durationMs = 800
+                           )
 
                        }
                    }
                    @SuppressLint("MissingPermission")
                    LaunchedEffect(Unit) {
                        fusedLocationClient.lastLocation
-                           .addOnSuccessListener { location -> location?.let {
-                               benimKonumum= LatLng(it.latitude,it.longitude)
-                           }
+                           .addOnSuccessListener { location ->
+                               location?.let {
+                                   benimKonumum = LatLng(it.latitude, it.longitude)
+                               }
 
                            }
                    }
@@ -130,7 +131,7 @@ class MainActivity : ComponentActivity() {
                    LaunchedEffect(benimKonumum) {
                        benimKonumum?.let {
                            cameraPositionState.animate(
-                               update = CameraUpdateFactory.newLatLngZoom(it,15f),
+                               update = CameraUpdateFactory.newLatLngZoom(it, 15f),
                                durationMs = 800
                            )
                        }
@@ -142,79 +143,93 @@ class MainActivity : ComponentActivity() {
                            .build()
                            .create(DirectionsApi::class.java)
                    }
-                   LaunchedEffect(hedef,benimKonumum) {
+                   LaunchedEffect(hedef, benimKonumum) {
                        val ben = benimKonumum
                        val şimal = hedef
                        Log.d("DIRECTIONS", "trigger ben=$ben hedef=$şimal")
 
-                       if (ben != null && şimal != null){
+                       if (ben != null && şimal != null) {
                            try {
                                val response = directionsApi.getDirections(
                                    origin = "${ben.latitude},${ben.longitude}",
                                    destination = "${şimal.latitude},${şimal.longitude}",
                                    mode = "walking",
-                                   key = directionsKey
+                                   key = directionsKey,
+                                           units = "metric"
 
 
                                )
-                               rotaPoints= response.routes.firstOrNull()?.overview_polyline?.points
+                               val leg = response.routes.firstOrNull()?.legs?.firstOrNull()
+                               sure = leg?.duration?.text
+                               mesafe = leg?.distance?.text
+                               Log.d("DIRECTIONS", "UI sure=$sure mesafe=$mesafe")
+
+
+                               rotaPoints = response.routes.firstOrNull()?.overview_polyline?.points
                                Log.d(
                                    "DIRECTIONS",
                                    "status=${response.status},routes=${response.routes.size}"
                                )
 
-                           }catch (e: Exception){
+                           } catch (e: Exception) {
                                Log.e("DIRECTIONS", "Directions çağrısı hata verdi", e)
 
                            }
 
 
-
-
-
-
-
                        }
-
 
 
                    }
 
+                   Box(modifier = modifier.fillMaxSize()) {
+
+                       GoogleMap(
+                           modifier = modifier.fillMaxSize(),
+                           cameraPositionState = cameraPositionState,
+                           onMapClick = { tiklanan ->
+                               hedef = tiklanan
 
 
-            GoogleMap(
-                modifier = modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState,
-                onMapClick = { tiklanan ->
-                    hedef = tiklanan
-                }
-            ) {
-                Marker(
-                    state = MarkerState(position = izmir),
-                    title = "Başlangıç Noktası"
+                           }
+                       ) {
+                           Marker(
+                               state = MarkerState(position = izmir),
+                               title = "Başlangıç Noktası"
 
-                )
-                benimKonumum?.let {
-                    Marker (
-                        state = MarkerState(it),
-                        title = "Bulunduğum konum"
-                    )
-                }
-                hedef?.let {
-                    Marker (
-                        state = MarkerState(it),
-                        title = "Hedef"
-                    )
-                }
-                rotaPoints?.let { encoded ->
-                    val decoded = decodePolyline(encoded)
-                    Polyline(points = decoded)
+                           )
+                           benimKonumum?.let {
+                               Marker(
+                                   state = MarkerState(it),
+                                   title = "Bulunduğum konum"
+                               )
+                           }
+                           hedef?.let {
+                               Marker(
+                                   state = MarkerState(it),
+                                   title = "Hedef nokta"
+                               )
+                           }
+                           rotaPoints?.let { encoded ->
+                               val decoded = decodePolyline(encoded)
+                               Polyline(points = decoded)
 
-                }
-            }
-        }
+                           }
+                       }
+                       if (sure != null && mesafe!= null){
+                           Log.d("UI", "UI sure=$sure mesafe=$mesafe")
+                        Text(
+                            text = "Yürüyüş Süresi: $sure .$mesafe",
+                            modifier= Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(12.dp)
 
+                        )
 
+                       }
+                   }
+
+               }
         konumIzni.shouldShowRationale -> {
             Column(
                 modifier = modifier

@@ -9,6 +9,8 @@ interface DirectionsApi {
         @Query("origin") origin: String,          // "lat,lng"
         @Query("destination") destination: String, // "lat,lng"
         @Query("mode") mode: String,              // "walking" / "driving" / "transit"
-        @Query("key") key: String
+        @Query("key") key: String,
+        @Query("units") units: String,
+
     ): DirectionsResponse
 }
