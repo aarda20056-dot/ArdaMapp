@@ -37,22 +37,20 @@ import android.annotation.SuppressLint
 import com.google.android.gms.location.LocationServices
 import androidx.compose.ui.platform.LocalContext
 import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.Alignment
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import com.google.maps.android.compose.Polyline
 import kotlin.math.*
 import com.google.android.gms.location.Priority
-
-
-
-
-
-
-
-
-
-
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.input.pointer.motionEventSpy
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 
 enum class UlasimModları(val apiDegeri: String, val etiket: String) {
@@ -82,6 +80,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+       @OptIn(ExperimentalMaterial3Api::class)
        @Composable
 
 
@@ -99,10 +98,17 @@ class MainActivity : ComponentActivity() {
            when {
 
                konumIzni.allPermissionsGranted -> {
+                   val bottomSheetState=  rememberModalBottomSheetState(
+                       skipPartiallyExpanded = true
+                   )
+                   var rotalarGosterilsin by remember { mutableStateOf(false) }
+
+                   var bottomSheetAcik by remember { mutableStateOf(false) }
                    var rotalar by remember { mutableStateOf<List<RotaSecenegi>>(emptyList()) }
                    var seciliUlasimModları by remember { mutableStateOf(UlasimModları.YURUYUS) }
                    val directionsKey = "AIzaSyAo9qkxqm2unYQIhfOHegFw-vdbNEYZBXU"
                    val context = LocalContext.current
+                   var hataMesajı by remember { mutableStateOf<String?>(null) }
                    val fusedLocationClient = remember {
                        LocationServices.getFusedLocationProviderClient(context)
                    }
@@ -176,29 +182,40 @@ class MainActivity : ComponentActivity() {
                                        key = directionsKey,
                                        units = "metric"
                                    )
+
                                    Log.d(
                                        "DIRECTIONS_MODE",
-                                       "mod=${m.etiket} status=${response.status} routes=${response.routes.size}")
-                                   val leg = response.routes.firstOrNull()?.legs?.firstOrNull()
-                                   val poly =
-                                       response.routes.firstOrNull()?.overview_polyline?.points
+                                       "mod=${m.etiket} status=${response.status} routes=${response.routes.size}"
+                                   )
+
+                                   val route = response.routes.firstOrNull() ?: continue
+                                   val leg = route.legs.firstOrNull() ?: continue
+                                   val poly = route.overview_polyline?.points ?: continue
+
 
                                    yeniRotalar.add(
                                        RotaSecenegi(
                                            ulasimModları = m,
-                                           sureYazisi = leg?.duration?.text,
-                                           mesafeYazisi = leg?.distance?.text,
+                                           sureYazisi = leg.duration?.text,
+                                           mesafeYazisi = leg.distance?.text,
                                            polylineNoktalari = poly
                                        )
                                    )
                                }
-                               rotalar = yeniRotalar
+                               if (yeniRotalar.isEmpty()) {
+                                   hataMesajı = "Seçilen hedef için geçerli bir rota bulunamadı."
+                                   rotalar = emptyList()
+                                   return@LaunchedEffect
+                               }
 
+                               hataMesajı = null
+                               rotalar = yeniRotalar
 
 
                            } catch (e: Exception) {
                                Log.e("DIRECTIONS", "Directions çağrısı hata verdi", e)
                                rotalar = emptyList()
+                               hataMesajı ="İnternet bağlantısı yok veya rota alınamadı."
 
 
 
@@ -206,97 +223,137 @@ class MainActivity : ComponentActivity() {
 
 
                        }
+
 
 
                    }
                    if (benimKonumum == null) {
-                       Text("Konum Alınıyor...")
+                       Box(
+                           modifier = Modifier
+                               .fillMaxSize(),
+                           contentAlignment = Alignment.Center
+                       ){
+                           Column(
+                               horizontalAlignment = Alignment.CenterHorizontally
+                           ) {
+                               Text("Konum alınıyor",fontSize = 20.sp)
+
+                               Spacer(Modifier.height(8.dp))
+
+                               LoadingDots()
+                           }
+
+                       }
                    } else {
 
                        Box(modifier = modifier.fillMaxSize()) {
+
                            val seciliRota = rotalar.firstOrNull { it.ulasimModları == seciliUlasimModları }
 
 
                            GoogleMap(
-                               modifier = modifier.fillMaxSize(),
+                               modifier = Modifier.fillMaxSize(),
                                cameraPositionState = cameraPositionState,
                                onMapClick = { tiklanan ->
                                    hedef = tiklanan
-
-
+                                   rotalarGosterilsin = false
+                                   bottomSheetAcik = false
                                }
                            ) {
-
                                benimKonumum?.let {
-                                   Marker(
-                                       state = MarkerState(it),
-                                       title = "Bulunduğum konum"
-                                   )
+                                   Marker(state = MarkerState(it), title = "Bulunduğum konum")
                                }
                                hedef?.let {
-                                   Marker(
-                                       state = MarkerState(it),
-                                       title = "Hedef nokta"
-                                   )
+                                   Marker(state = MarkerState(it), title = "Hedef nokta")
                                }
-                              seciliRota?.polylineNoktalari?.let { encoded ->
-                                   val decoded = decodePolyline(encoded)
-                                   Polyline(points = decoded)
-
+                               seciliRota?.polylineNoktalari?.let { encoded ->
+                                   Polyline(points = decodePolyline(encoded))
                                }
                            }
-                           Column(
-                               modifier = Modifier
-                                   .align(Alignment.TopCenter)
-                                   .padding(12.dp),
-                               horizontalAlignment = Alignment.CenterHorizontally
-                           ) {
-                               rotalar
-                                   .sortedByDescending { it.ulasimModları==seciliUlasimModları }
-                                   .forEach { r ->
-                                   Button(
-                                       onClick = {
-                                           seciliUlasimModları = r.ulasimModları
 
-                                       },
-                                       modifier = Modifier.fillMaxWidth(0.92f)
+
+                           Button(
+                               onClick = {
+                                   rotalarGosterilsin= true
+                                   bottomSheetAcik = true },
+                               modifier = Modifier
+                                   .align(Alignment.TopEnd)
+                                   .padding(12.dp)
+                           ) { Text("Rotalar") }
+                           hataMesajı?.let { mesaj ->
+                               Box(
+                                   modifier = Modifier
+                                       .fillMaxSize()
+                                       .background(
+                                           androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.35f)
+                                       ),
+                                   contentAlignment = Alignment.Center
+                               ) {
+                                   Column(
+                                       modifier = Modifier
+                                           .fillMaxWidth(0.85f)
+                                           .background(
+                                               color = androidx.compose.ui.graphics.Color.White,
+                                               shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                                           )
+                                           .padding(16.dp),
+                                       horizontalAlignment = Alignment.CenterHorizontally
                                    ) {
-                                       val seçililiMod =r.ulasimModları==seciliUlasimModları
-                                       val yuruyus = rotalar.firstOrNull { it.ulasimModları == UlasimModları.YURUYUS }
-                                       val transitYuruyusGibiMi =
-                                           (r.ulasimModları == UlasimModları.TOPLU_TASIMA) &&
-                                                   (yuruyus != null) &&
-                                                   (r.sureYazisi == yuruyus.sureYazisi) &&
-                                                   (r.mesafeYazisi == yuruyus.mesafeYazisi)
+
+
                                        Text(
-                                           "${if (seçililiMod) "✅ " else ""}${r.ulasimModları.etiket}" +
-                                                   "${if (transitYuruyusGibiMi) " (yürüyüş gibi)" else ""}: " +
-                                                   "${r.sureYazisi ?: "-"} • ${r.mesafeYazisi ?: "-"}"
+                                           text = mesaj,
+                                           modifier = Modifier.padding(bottom = 12.dp)
                                        )
 
 
-                                   }
-
-                                   Spacer(Modifier.height(4.dp))
-                               }
-                               seciliRota?.let { secili ->
-                                   Spacer(Modifier.height(6.dp))
-                                   Text("Seçili: ${secili.ulasimModları.etiket} • ${secili.sureYazisi ?: "-"} • ${secili.mesafeYazisi ?: "-"}")
-
-                                   val yuruyus = rotalar.firstOrNull { it.ulasimModları == UlasimModları.YURUYUS }
-                                   val toplu = rotalar.firstOrNull { it.ulasimModları == UlasimModları.TOPLU_TASIMA }
-
-                                   if (
-                                       yuruyus != null && toplu != null &&
-                                       toplu.sureYazisi == yuruyus.sureYazisi &&
-                                       toplu.mesafeYazisi == yuruyus.mesafeYazisi
-                                   ) {
-                                       Text("Not: Bu saat için toplu taşıma uygun görünmüyo; yürüyüş ile aynı rota öneriliyor.")
+                                       Button(
+                                           onClick = { hataMesajı = null },
+                                           modifier = Modifier.fillMaxWidth()
+                                       ) {
+                                           Text("Tamam")
+                                       }
                                    }
                                }
                            }
 
+
+
+
+
+                           if (bottomSheetAcik && rotalarGosterilsin) {
+                               ModalBottomSheet(
+                                   onDismissRequest = { bottomSheetAcik = false },
+                                   sheetState = bottomSheetState
+                               ) {
+
+                                   Column(
+                                       modifier = Modifier
+                                           .fillMaxWidth()
+                                           .padding(16.dp)
+                                   ) {
+                                       Text("Ulaşım Seçenekleri", modifier = Modifier.padding(bottom = 8.dp))
+
+                                       rotalar.forEach { r ->
+                                           Button(
+                                               onClick = { seciliUlasimModları = r.ulasimModları },
+                                               modifier = Modifier.fillMaxWidth()
+                                           ) {
+                                               val seciliMi = r.ulasimModları == seciliUlasimModları
+                                               Text("${if (seciliMi) "✅ " else ""}${r.ulasimModları.etiket}: ${r.sureYazisi ?: "-"} • ${r.mesafeYazisi ?: "-"}")
+                                           }
+                                           Spacer(Modifier.height(6.dp))
+                                       }
+
+                                       Button(
+                                           onClick = { bottomSheetAcik = false },
+                                           modifier = Modifier.fillMaxWidth()
+                                       ) { Text("Kapat") }
+                                   }
+                               }
+                           }
                        }
+
                    }
                }
 
@@ -391,5 +448,17 @@ fun GreetingPreview() {
         Greeting("Android")
     }
 }
+@Composable
+fun LoadingDots(){
+    val dots = listOf("•", "••", "•••")
+    var index by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(400)
+            index=(index+1)%dots.size
+        }
+        }
+    Text(dots[index])
+    }
 
 
