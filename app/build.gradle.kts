@@ -1,5 +1,7 @@
 import com.android.build.gradle.internal.core.dsl.features.ManifestPlaceholdersDslInfo
 import com.android.build.gradle.tasks.ManifestProcessorTask
+import java.util.Properties
+
 
 plugins {
     alias(libs.plugins.android.application)
@@ -18,13 +20,13 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val mapsKey = providers.gradleProperty("MAPS_API_KEY").orNull
-        manifestPlaceholders["MAPS_API_KEY"] = mapsKey ?: ""
 
-        println("MAPS_API_KEY=" + (project.findProperty("MAPS_API_KEY") ?: "NULL"))
+        val props = Properties()
+        props.load(rootProject.file("local.properties").inputStream())
+        val mapsKey = props.getProperty("MAPS_API_KEY") ?: ""
 
-
+        manifestPlaceholders["MAPS_API_KEY"] = mapsKey
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsKey\"")
     }
 
     buildTypes {
@@ -44,7 +46,7 @@ android {
         jvmTarget = "11"
     }
     buildFeatures {
-        compose = true
+        buildConfig = true
     }
 }
 
@@ -73,6 +75,8 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.android.libraries.places:places:3.3.0")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
 
 
 
