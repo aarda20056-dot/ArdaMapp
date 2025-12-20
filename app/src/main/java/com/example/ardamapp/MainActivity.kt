@@ -52,7 +52,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.FilledTonalButton
@@ -81,21 +80,18 @@ import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.snapshotFlow
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import kotlinx.coroutines.CancellationException
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -547,7 +543,10 @@ class MainActivity : ComponentActivity() {
                                     return@MapTopControls
                                 }
                                 scope.launch {
-                                    val name = if (searchText.isNotBlank()) searchText else "Favori Konum"
+                                    val existingCount = favorites.size
+                                    val autoName = "Favori ${existingCount + 1}"
+                                    val name = if (searchText.isNotBlank()) searchText else autoName
+
                                     val id = "${h.latitude},${h.longitude}"
                                     addFavorite(context, FavoritePlace(id, name, h.latitude, h.longitude))
                                     showSnackbar("Favorilere eklendi: $name")
@@ -947,37 +946,51 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
-                                if (suggestionsVisible && suggestions.isNotEmpty()) {
-                                }
-
                             }
                         }
+
+
                     }
-
-
                 }
             }
 
             Spacer(Modifier.height(4.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ElevatedButton(onClick = onShowRoutes) {
+                ElevatedButton(
+                    onClick = onShowRoutes,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Icon(Icons.Default.Route, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Rotalar")
                 }
 
-                Spacer(Modifier.width(8.dp))
-
-                ElevatedButton(onClick = onShowFavorites) {
+                ElevatedButton(
+                    onClick = onShowFavorites,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Icon(Icons.Default.Star, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Favoriler")
                 }
+
+                FilledTonalButton(
+                    onClick = onSaveFavorite,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Kaydet")
+                }
+
             }
+
 
         }
     }
@@ -1089,6 +1102,7 @@ suspend fun removeFavorite(context: Context, id: String) {
         prefs[FAVORITES_KEY] = encodeFavorites(current.filterNot { it.id == id })
     }
 }
+
 
 
 
